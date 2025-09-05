@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+service Greeter {
+  // Unary RPC
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+  
+  // Server streaming RPC
+  rpc SayHelloStream (HelloRequest) returns (stream HelloReply) {}
+  
+  // Client streaming RPC
+  rpc SayHelloClientStream (stream HelloRequest) returns (HelloReply) {}
+  
+  // Bidirectional streaming RPC
+  rpc SayHelloBidirectional (stream HelloRequest) returns (stream HelloReply) {}
+  
+  // Method that might return an error
+  rpc SayHelloWithError (HelloRequest) returns (HelloReply) {}
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}

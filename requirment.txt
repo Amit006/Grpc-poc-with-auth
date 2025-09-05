@@ -1,0 +1,28 @@
+# gRPC core library
+grpcio>=1.60.0
+
+# gRPC tools for protobuf compilation and development
+grpcio-tools>=1.60.0
+
+# Protocol Buffers library
+protobuf>=4.25.0
+
+# JWT token handling
+PyJWT>=2.8.0
+
+# Optional: For cryptographic operations (recommended for JWT)
+cryptography>=41.0.0
+
+# Optional: For enhanced logging and formatting
+colorlog>=6.7.0
+
+# For testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# For code quality
+black==23.11.0
+flake8==6.1.0
+
+# For generating certificates (development only)
+pyopenssl==23.3.0
