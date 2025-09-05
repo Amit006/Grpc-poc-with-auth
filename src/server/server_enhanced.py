@@ -3,11 +3,34 @@ from concurrent import futures
 import logging
 import time
 from grpc import StatusCode
-import greeter_pb2
-import greeter_pb2_grpc
+import sys
+import os
 import jwt
 from datetime import datetime, timedelta
 from jwt import InvalidTokenError, ExpiredSignatureError, InvalidSignatureError
+
+# Add the path to the 'generated' folder to sys.path if not already present
+# From src/server, we need to go up two levels to reach project root, then into generated
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
+generated_path = os.path.join(project_root, 'generated')
+
+if generated_path not in sys.path:
+    sys.path.insert(0, generated_path)
+
+try:
+    # Import the actual files (note: gretter with double 't')
+    import gretter_pb2 as greeter_pb2
+    import gretter_pb2_grpc as greeter_pb2_grpc
+    print("Successfully imported protobuf modules")
+except ImportError as e:
+    print(f"Failed to import protobuf modules: {e}")
+    print("Available files in generated directory:")
+    if os.path.exists(generated_path):
+        print(os.listdir(generated_path))
+    else:
+        print("Generated directory does not exist!")
+    sys.exit(1)
 
 # Custom exception for business logic errors
 class ValidationError(Exception):
@@ -27,61 +50,6 @@ class AuthInterceptor(grpc.ServerInterceptor):
         self.issuer = issuer
         self.audience = audience
 
-    # def intercept_service(self, continuation, handler_call_details):
-    #     metadata = dict(handler_call_details.invocation_metadata)
-        
-    #     auth_header = metadata.get('authorization', '')
-        
-    #     # Check if authorization header is present and has the correct format
-    #     if not auth_header.startswith('Bearer '):
-    #         logging.warning("Missing or malformed authorization header")
-    #         return self._abortion
-            
-    #     token = auth_header[7:]  # Remove 'Bearer ' prefix
-        
-    #     try:
-    #         # Comprehensive JWT token validation
-    #         validation_options = {
-    #             'verify_signature': True,
-    #             'verify_exp': True,      # Verify expiration time
-    #             'verify_nbf': True,      # Verify not before time
-    #             'verify_iat': True,      # Verify issued at time
-    #             'verify_aud': self.audience is not None,  # Verify audience if provided
-    #             'verify_iss': self.issuer is not None,    # Verify issuer if provided
-
-    #         }
-            
-    #         payload = jwt.decode(
-    #             token, 
-    #             self.secret_key, 
-    #             algorithms=['HS256'],
-    #             options=validation_options,
-    #             audience=self.audience,
-    #             issuer=self.issuer,
-    #             leeway=30  # Allow 30 seconds of clock skew
-    #         )
-            
-    #         # Additional custom validations can be added here
-    #         # For example, check if the token has been revoked
-    #         # or if the user still exists in the system
-            
-    #         logging.info(f"Successfully authenticated user: {payload.get('sub', 'Unknown')}")
-            
-    #         return continuation(handler_call_details)
-            
-    #     except ExpiredSignatureError:
-    #         logging.warning("Token has expired")
-    #         return self._abortion
-    #     except InvalidSignatureError:
-    #         logging.warning("Invalid token signature")
-    #         return self._abortion
-    #     except InvalidTokenError as e:
-    #         logging.warning(f"Invalid token: {str(e)}")
-    #         return self._abortion
-    #     except Exception as e:
-    #         logging.error(f"Unexpected error during token validation: {str(e)}")
-    #         return self._abortion
-    # In AuthInterceptor's intercept_service method
     def intercept_service(self, continuation, handler_call_details):
         metadata = dict(handler_call_details.invocation_metadata)
         
@@ -185,15 +153,34 @@ class GreeterServicer(greeter_pb2_grpc.GreeterServicer):
         return greeter_pb2.HelloReply(message=f'Hello, {request.name}!')
 
 def serve():
-    # Load TLS credentials
-    with open('server.key', 'rb') as f:
-        private_key = f.read()
-    with open('server.crt', 'rb') as f:
-        certificate_chain = f.read()
+    # Use the project root we already calculated
+    cert_dir = os.path.join(project_root, 'certificates')
     
-    server_credentials = grpc.ssl_server_credentials(
-        ((private_key, certificate_chain),)
-    )
+    # Check if certificate files exist
+    server_key_path = os.path.join(cert_dir, 'server.key')
+    server_crt_path = os.path.join(cert_dir, 'server.crt')
+    
+    if not os.path.exists(server_key_path):
+        logging.error(f"Server key file not found at {server_key_path}")
+        return
+    
+    if not os.path.exists(server_crt_path):
+        logging.error(f"Server certificate file not found at {server_crt_path}")
+        return
+
+    # Load TLS credentials using absolute path
+    try:
+        with open(server_key_path, 'rb') as f:
+            private_key = f.read()
+        with open(server_crt_path, 'rb') as f:
+            certificate_chain = f.read()
+        
+        server_credentials = grpc.ssl_server_credentials(
+            ((private_key, certificate_chain),)
+        )
+    except Exception as e:
+        logging.error(f"Error loading TLS credentials: {e}")
+        return
     
     # Create server with interceptors
     # Use a strong secret key in production (not hardcoded)
@@ -212,9 +199,17 @@ def serve():
     server.add_secure_port('[::]:50051', server_credentials)
     
     server.start()
-    print("Secure server started on port 50051...")
-    server.wait_for_termination()
+    logging.info("Secure server started on port 50051...")
+    
+    try:
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        logging.info("Shutting down server...")
+        server.stop(0)
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     serve()

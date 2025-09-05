@@ -24,10 +24,18 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+grpc_env/
+
+#active_env
+activate_env.bat
+activate_env.ps1
 
 # PyInstaller
 *.manifest
 *.spec
+
+*.qodo
+
 
 # Installer logs
 pip-log.txt
